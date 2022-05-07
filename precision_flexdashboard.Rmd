@@ -1,0 +1,203 @@
+---
+title: "Precision Flexdashboard"
+author: "Seth Bergstedt"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+---
+
+One question that came up when using this dataset was how varied the quality of data collection is. To investigate this, we have focused on sources of missing data and ultimately found that the greatest variability in data quality could be found in the precision of taxonomic classifications present in the dataset. The following dashboard shows how taxonomic precision varies from region to region as well as how this precision has changed over time in each region. This is summarized by assigning a score to each observation based on the most precise taxonomy present (genus gets a score of 1, species gets a score of 2, and subspecies gets a score of 2.5).
+
+Altogether, these plots indicate that the precision of mosquito taxonomy does indeed vary by region and over time (though the temporal trends appear to be exclusively seasonal). Alaska appears to have significantly lower precision than other regions while the Northeastern Coast appears to have much higher precision.  
+
+A note: actual data missingness (missing taxonomy altogether or missing counts) were associated with all subject specific data to be missing (apart from collection time and collection location). Looking into the data documentation, I couldn't find an explanation for this (perhaps this is the result of past data entries being corrected with a shell of the data remaining).
+
+Column {.tabset}
+-------------------------------------------
+
+```{r setup, include = FALSE, echo = FALSE}
+library(tidyverse)
+library(lubridate)
+library(gt)
+library(sf)
+library(paletteer)
+library(plotly)
+library(flexdashboard)
+library(ggthemes)
+
+#Working directory for .RMD
+knitr::opts_knit$set(echo = TRUE,
+                     root.dir = rprojroot::find_rstudio_root_file())
+
+#Controlling figure output in markdown
+knitr::opts_chunk$set(
+  # fig.height = 10,
+  fig.width = 6,
+#  fig.asp = .5,
+  out.width = "90%",
+#  out.height = 
+ fig.align  = "center",
+  cache = FALSE,
+  eval  = TRUE,
+  echo  = TRUE,
+  warning = FALSE
+)
+
+#My Colours (from viridis)
+my_purple <- "#440154FF"
+my_yellow <- "#FDE725FF"
+
+#Set Theme for ggplot2
+theme_set(theme_bw() + theme(plot.title = element_text(hjust = 0.5), legend.position = "bottom"))
+
+#Set Scientific notation output and decimal places for knitr
+options(scipen = 999)
+options(digits = 4)
+options(dplyr.summarise.inform = FALSE)
+
+# data import
+
+mosq_data <- read_rds("./data/mosq_data.rds")
+
+neon_domains <- st_read("./data/NEONDomains_0/NEON_Domains.shp") %>%
+  janitor::clean_names() %>%
+  mutate(
+    domain_id = domain_id %>% ## Convert Domain ID from int to char
+      as.character() %>%
+      str_pad(width = 2, side = "left", pad = "0") %>%
+      str_c("D", .)
+    )
+
+mos_id = mosq_data$mos_expertTaxonomistIDProcessed
+
+dat_strange = mos_id %>%
+  filter(is.na(individualCount))
+
+dat_test = mos_id %>%
+  filter(is.na(taxonRank))
+
+# No meaningful information on samples for which there isn't individual count information
+# No meaningful information on sample for which there isn't taxon data
+# The former is exclusively from the Kansas Biologic Survey, 
+# The latter is from Vector Disease Control International
+```
+
+### Taxonomic Precision by Genus
+
+```{r, echo=FALSE}
+dat_mis = mos_id %>%
+  filter(!is.na(individualCount),!is.na(taxonRank)) %>%
+  group_by(domainID, taxonRank) %>%
+  summarize(taxon_count = sum(individualCount)) %>%
+  ungroup() %>% 
+  group_by(domainID) %>%
+  mutate(prop_taxon = taxon_count / sum(taxon_count)) %>%
+  group_by(domainID,taxonRank) %>%
+  pivot_wider(names_from = taxonRank, values_from = c(taxon_count,prop_taxon)) %>%
+  janitor::clean_names() %>%
+  mutate(across(.fns = function(x) {ifelse(is.na(x),0,x)}),
+         text_label = str_c("Proportion Identified to Genus: ", round(prop_taxon_genus,3),
+                            "\nProportion Identified to Species: ", round(prop_taxon_species,3),
+                            "\nProportion Identified to Sub-species: ",
+                            round(prop_taxon_subspecies,3),
+                            "\nTotal Number of Samples Caught: ", 
+                            taxon_count_genus + taxon_count_species + taxon_count_subspecies))
+  
+
+domain_mis_map = left_join(neon_domains, dat_mis, by = "domain_id")
+
+miss_gg = ggplot(domain_mis_map) + 
+  geom_sf(aes(text = text_label, 
+              fill = prop_taxon_genus)) + 
+  labs(title = "Precision of Mosquito Taxonometric Measurements by Region",
+       fill = "Proportion Identified to Genus") + 
+  scale_fill_viridis_c(name = "Proportion Identified only to Genus") +
+  theme_map()
+
+ggplotly(miss_gg, tooltip = "text")
+```
+
+### Taxonomic Precision by Species
+
+```{r, echo=FALSE}
+miss_gg = ggplot(domain_mis_map) + 
+  geom_sf(aes(text = text_label, 
+              fill = prop_taxon_species)) + 
+  labs(title = "Precision of Mosquito Taxonometric Measurements by Region",
+       fill = "Proportion Identified to Species") + 
+  scale_fill_viridis_c(name = "Proportion Identified only to Species") +
+  theme_map()
+
+ggplotly(miss_gg, tooltip = "text")
+```
+
+### Taxonomic Precision by Subspecies
+
+```{r, echo=FALSE}
+miss_gg = ggplot(domain_mis_map) + 
+  geom_sf(aes(text = text_label, 
+              fill = prop_taxon_subspecies)) + 
+  labs(title = "Precision of Mosquito Taxonometric Measurements by Region",
+       fill = "Proportion Identified to Sub-Species") + 
+  scale_fill_viridis_c(name = "Proportion Identified only to Sub-Species") +
+  theme_map()
+
+ggplotly(miss_gg, tooltip = "text")
+```
+
+
+### Taxonomic Precision Trends over Time
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+dat_trend = mos_id %>%
+  filter(!is.na(individualCount),!is.na(taxonRank)) %>%
+  janitor::clean_names() %>%
+  mutate(collection_day = date(collect_date)) %>%
+  group_by(domain_id, collection_day, taxon_rank) %>%
+  summarize(taxon_count = sum(individual_count)) %>%
+  ungroup() %>%
+  pivot_wider(names_from = taxon_rank, values_from = taxon_count) %>%
+  mutate(across(.fns = function(x) {ifelse(is.na(x),0,x)})) %>%
+  group_by(domain_id,collection_day) %>%
+  mutate(tax_precision = log(genus + 2*species + 2.5*subspecies),
+         tax_precision = tax_precision) %>%
+  ungroup() %>%
+  mutate(domain_id = as.factor(domain_id),
+         domain_id = fct_recode(domain_id,
+                                 "Northeast" = "D01",
+                                "Mid Atlantic" = "D02",
+                                "Southeast" = "D03",
+                                "Atlantic Neotropical" = "D04",
+                                "Great Lakes" = "D05",
+                                "Prairie Peninsula" = "D06",
+                                "Appalachians" = "D07",
+                                "Ozarks Complex" = "D08",
+                                "Northern Plains" = "D09",
+                                "Central Plains" = "D10",
+                                "Southern Plains" = "D11",
+                                "Northern Rockies" = "D12",
+                                "South Rockies" = "D13",
+                                "Desert Southwest" = "D14",
+                                "Great Basin" = "D15",
+                                "Pacific Northwest" = "D16",
+                                "Pacific Northwest" = "D17",
+                                "Tundra" = "D18",
+                                "Taiga" = "D19",
+                                "Pacific Tropical" = "D20"),
+         collection_day = as_date(collection_day),
+         text_label = str_c("Collection Day: ", collection_day,
+                            "\nTaxonomic Precision Index: ", tax_precision))
+
+trend_gg = ggplot(dat_trend,aes(x = collection_day, y = tax_precision, text = text_label)) +
+  geom_jitter(alpha = 0.4, color = "steelblue", size = 0.6) + 
+  geom_smooth(color = "royalblue4") + 
+  facet_wrap(~domain_id) + 
+  labs(title = "Taxonomic Precision Over Time by Region",
+       x = "Collection Day",
+       y = "Taxonomic Precision Index (Higher = more precise)") +
+  theme_few() + 
+  scale_x_date(date_breaks = "1 year", date_labels = "%y", expand = expansion())
+
+ggplotly(trend_gg, tooltip = "text")
+```
