@@ -25,9 +25,14 @@ The data used in this project was mosquito trapping data from the National Ecolo
 
 <font size = "4">
 1. How does overall mosquito biomass and species richness change over the course of the year, and how does that vary across US regions? (Spatial and Seasonal Trends)  
+- Biomass is highest in the Great Lakes and Tundra Domains, with seasonal peaks in July.  
+- Species Richness is highest for the domains in the Southeast US, such as the Southern Plains.  
 2. How do the biomass of mosquitoes collected and number of mosquitoes identified by genus nationwide vary by year? (Annual Trends)  
+- Mosquito biomass/hr and genera proportions are fairly consistent over the years.  
 3. How abundant are medically important mosquitoes throughout the US, and how prevalent are mosquito-borne pathogens? (Pathogen Vectors)  
-4. What are some of the limitations and caveats of the data? For example, do certain locations have trends in reporting? (Caveats and Limitations)  
+- Disease vectors are most common in the Northern Plains Domain, and positive tests for pathogen were most common for the Great Lakes Domain.  
+4. At what precision were mosquitoes identified and how does that vary in time and space? (Taxonomic Precision)  
+- Many mosquitoes in the Alaskan domains were only IDed to genus, while many mosquitoes in the Northeast Domain were identified all the way to subspecies.  
 </font>
 
 <h3>Acknowledgments and References</h3>
